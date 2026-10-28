@@ -2,6 +2,8 @@
 import os
 import pwd
 import grp
+import hmac
+import time
 import traceback
 import pyotp
 import json
@@ -18,6 +20,7 @@ import json
 # auth sufficient pam_python.so /usr/libexec/pam_otp.py
 
 config_file = "/etc/otp-secrets.json"
+state_dir = "/run/eta-otp"
 
 # common-auth is shared by every pam service. The pin is meant for logging in
 # at the board, it shouldn't replace the password for getting root.
@@ -52,7 +55,26 @@ def pam_sm_authenticate(pamh, flags, argv):
 
     def check_otp(user):
         otp = pyotp.TOTP(config[user])
-        return (otp.now() == pamh.authtok)
+        now = time.time()
+        if not pamh.authtok or not hmac.compare_digest(otp.at(now), pamh.authtok):
+            return False
+
+        # a code is valid for the whole 30 seconds, don't let it be used twice
+        timestep = int(now // otp.interval)
+        state_file = os.path.join(state_dir, user.replace("/", "_"))
+        try:
+            with open(state_file, "r") as f:
+                if timestep <= int(f.read().strip()):
+                    return False
+        except (OSError, ValueError):
+            pass
+        try:
+            os.makedirs(state_dir, mode=0o700, exist_ok=True)
+            with open(state_file, "w") as f:
+                f.write(str(timestep))
+        except OSError:
+            pass
+        return True
 
     # check otp by group
     for group in grp.getgrall():
