@@ -19,7 +19,15 @@ import json
 
 config_file = "/etc/otp-secrets.json"
 
+# common-auth is shared by every pam service. The pin is meant for logging in
+# at the board, it shouldn't replace the password for getting root.
+skip_services = ["sudo", "sudo-i", "su", "su-l", "runuser", "runuser-l",
+                 "polkit-1", "sshd"]
+
 def pam_sm_authenticate(pamh, flags, argv):
+    if pamh.service in skip_services:
+        return pamh.PAM_IGNORE
+
     # fetch username
     try:
         user = pamh.get_user(None)
