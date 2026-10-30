@@ -56,7 +56,14 @@ def pam_sm_authenticate(pamh, flags, argv):
     def check_otp(user):
         otp = pyotp.TOTP(config[user])
         now = time.time()
-        if not pamh.authtok or not hmac.compare_digest(otp.at(now), pamh.authtok):
+        token = pamh.authtok
+        if not token:
+            return False
+        # compare bytes, compare_digest raises on str with non ascii
+        # characters (a normal password like "şifre" goes through here too)
+        if isinstance(token, str):
+            token = token.encode()
+        if not hmac.compare_digest(otp.at(now).encode(), token):
             return False
 
         # a code is valid for the whole 30 seconds, don't let it be used twice
