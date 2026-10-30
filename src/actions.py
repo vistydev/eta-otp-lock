@@ -37,8 +37,9 @@ def write_config():
     os.replace(tmp_file, config_file)
 
 def valid_secret(secret):
-    # at least 80 bits, same as what the gui generates
-    if len(secret) < 16:
+    # pam_otp.py can't use a secret that doesn't decode, it would raise there.
+    # No length limit: the "from key" option in the gui can make short ones.
+    if not secret:
         return False
     try:
         # decoded the same way pyotp does it
